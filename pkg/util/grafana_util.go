@@ -3,8 +3,8 @@
 package util
 
 import (
-	"crypto/md5"
 	"encoding/hex"
+	"hash/fnv"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -20,7 +20,7 @@ const (
 func GenerateUID(namespace string, name string) string {
 	uid := namespace + "-" + name
 	if len(uid) > 40 {
-		hasher := md5.New()
+		hasher := fnv.New128a()
 		hasher.Write([]byte(uid))
 		uid = hex.EncodeToString(hasher.Sum(nil))
 	}
