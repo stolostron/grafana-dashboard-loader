@@ -50,8 +50,8 @@ func SetRequest(method string, url string, body io.Reader) ([]byte, int) {
 	respBody, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		klog.Info("failed to parse response body", "error", err)
-	} else {
-		klog.Info("Succeed to parse response body", "Response body", string(respBody))
-	}
+	} //else {
+	// 	klog.Info("Succeed to parse response body", "Response body", string(respBody))
+	// }
 	return respBody, resp.StatusCode
 }
