@@ -1,6 +1,6 @@
 # grafana-dashboard-loader
 
-The grafana-dashboard-loader is a small HTTP reverse proxy.
+The grafana-dashboard-loader is loader to load the grafana dashboards.
 
 ## Usage
 
