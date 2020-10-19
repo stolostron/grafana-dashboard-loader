@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"k8s.io/klog"
 )
@@ -41,10 +42,18 @@ func SetRequest(method string, url string, body io.Reader) ([]byte, int) {
 	req.Header.Set("X-Forwarded-User", defaultAdmin)
 
 	resp, err := getHTTPClient().Do(req)
-	if err != nil {
+	for {
+		if err == nil {
+			break
+		}
+		klog.Error("failed to send HTTP request. Retry in 5 seconds", "error", err)
+		time.Sleep(5)
+		resp, err = getHTTPClient().Do(req)
+	}
+	/* 	if err != nil {
 		klog.Error("failed to send HTTP request", "error", err)
 		return nil, 500
-	}
+	} */
 
 	defer resp.Body.Close()
 	respBody, err := ioutil.ReadAll(resp.Body)

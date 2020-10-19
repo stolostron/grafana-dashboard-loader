@@ -129,9 +129,14 @@ func (loader *DashboardLoader) createCustomFolder() float64 {
 // UpdateDashboard is used to update the customized dashboards via calling grafana api
 func (loader *DashboardLoader) updateDashboard(obj interface{}, overwrite bool) {
 
-	folderID := loader.createCustomFolder()
-	if folderID == 0 {
-		return
+	folderID := 0.0
+	labels := obj.(*corev1.ConfigMap).ObjectMeta.Labels
+	if labels["general-folder"] == "" || strings.ToLower(labels["general-folder"]) != "true" {
+		folderID = loader.createCustomFolder()
+		if folderID == 0 {
+			klog.Error("Failed to get custom folder id")
+			return
+		}
 	}
 	for _, value := range obj.(*corev1.ConfigMap).Data {
 
@@ -142,6 +147,7 @@ func (loader *DashboardLoader) updateDashboard(obj interface{}, overwrite bool) 
 			return
 		}
 		dashboard["uid"] = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(), obj.(*corev1.ConfigMap).GetNamespace())
+		dashboard["id"] = nil
 		data := map[string]interface{}{
 			"folderId":  folderID,
 			"overwrite": overwrite,
