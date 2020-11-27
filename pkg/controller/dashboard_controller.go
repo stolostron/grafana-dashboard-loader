@@ -1,6 +1,6 @@
 // Copyright (c) 2020 Red Hat, Inc.
 
-package loader
+package controller
 
 import (
 	"bytes"
@@ -17,41 +17,51 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
 
 	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/util"
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
 )
 
 // DashboardLoader ...
 type DashboardLoader struct {
-	clientset *kubernetes.Clientset
-	informer  cache.SharedIndexInformer
+	coreClient corev1client.CoreV1Interface
+	informer   cache.SharedIndexInformer
 }
 
-const (
+var (
 	grafanaURI = "http://127.0.0.1:3001"
+	//retry on errors
+	retry = 10
 )
 
-// NewDashboardLoader ...
-func NewDashboardLoader(clientset *kubernetes.Clientset) *DashboardLoader {
-	return &DashboardLoader{clientset: clientset}
+func RunGrafanaLoaderController(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+	// Build kubclient client and informer for managed cluster
+	kubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
+	go newKubeInformer(kubeClient.CoreV1()).Run(ctx.Done())
+	<-ctx.Done()
+	return nil
 }
 
-// WatchDashboardConfigMaps ...
-func (loader *DashboardLoader) WatchDashboardConfigMaps() {
-
+func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexInformer {
+	// get watched namespace
 	watchedNS := os.Getenv("POD_NAMESPACE")
 
-	loader.informer = cache.NewSharedIndexInformer(
+	kubeInformer := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-				return loader.clientset.CoreV1().ConfigMaps(watchedNS).List(context.TODO(), metav1.ListOptions{
+				return coreClient.ConfigMaps(watchedNS).List(context.TODO(), metav1.ListOptions{
 					LabelSelector: "grafana-custom-dashboard=true",
 				})
 			},
 			WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-				return loader.clientset.CoreV1().ConfigMaps(watchedNS).Watch(context.TODO(), metav1.ListOptions{
+				return coreClient.ConfigMaps(watchedNS).Watch(context.TODO(), metav1.ListOptions{
 					LabelSelector: "grafana-custom-dashboard=true",
 				})
 			},
@@ -59,40 +69,29 @@ func (loader *DashboardLoader) WatchDashboardConfigMaps() {
 		&corev1.ConfigMap{}, time.Second, cache.Indexers{},
 	)
 
-	loader.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	kubeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			klog.Info("detect there is a new dashboard created", "name", obj.(*corev1.ConfigMap).Name)
-			loader.updateDashboard(obj, false)
+			klog.Infof("detect there is a new dashboard %v created", obj.(*corev1.ConfigMap).Name)
+			updateDashboard(obj, false)
 		},
 		UpdateFunc: func(old, new interface{}) {
 			if !reflect.DeepEqual(old.(*corev1.ConfigMap).Data, new.(*corev1.ConfigMap).Data) {
-				klog.Info("detect there is a customized dashboard updated", "name", new.(*corev1.ConfigMap).Name)
-				loader.updateDashboard(new, false)
+				klog.Infof("detect there is a customized dashboard %v updated", new.(*corev1.ConfigMap).Name)
+				updateDashboard(new, false)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			klog.Info("detect there is a customized dashboard deleted", "name", obj.(*corev1.ConfigMap).Name)
-			loader.deleteDashboard(obj.(*corev1.ConfigMap).Name, obj.(*corev1.ConfigMap).Namespace)
+			klog.Infof("detect there is a customized dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
+			deleteDashboard(obj.(*corev1.ConfigMap).Name, obj.(*corev1.ConfigMap).Namespace)
 		},
 	})
+
+	return kubeInformer
 }
 
-// Run ...
-func (loader *DashboardLoader) Run(stop <-chan struct{}) {
-
-	go loader.informer.Run(stop)
-
-	for {
-		time.Sleep(time.Second * 30)
-	}
-	<-stop
-	klog.Info("loader terminated")
-}
-
-func (loader *DashboardLoader) hasCustomFolder() float64 {
+func hasCustomFolder() float64 {
 	grafanaURL := grafanaURI + "/api/folders"
-
-	body, _ := util.SetRequest("GET", grafanaURL, nil)
+	body, _ := util.SetRequest("GET", grafanaURL, nil, retry)
 
 	folders := []map[string]interface{}{}
 	err := json.Unmarshal(body, &folders)
@@ -109,11 +108,11 @@ func (loader *DashboardLoader) hasCustomFolder() float64 {
 	return 0
 }
 
-func (loader *DashboardLoader) createCustomFolder() float64 {
-	folderID := loader.hasCustomFolder()
+func createCustomFolder() float64 {
+	folderID := hasCustomFolder()
 	if folderID == 0 {
 		grafanaURL := grafanaURI + "/api/folders"
-		body, _ := util.SetRequest("POST", grafanaURL, strings.NewReader("{\"title\":\"Custom\"}"))
+		body, _ := util.SetRequest("POST", grafanaURL, strings.NewReader("{\"title\":\"Custom\"}"), retry)
 
 		folder := map[string]interface{}{}
 		err := json.Unmarshal(body, &folder)
@@ -126,13 +125,13 @@ func (loader *DashboardLoader) createCustomFolder() float64 {
 	return folderID
 }
 
-// UpdateDashboard is used to update the customized dashboards via calling grafana api
-func (loader *DashboardLoader) updateDashboard(obj interface{}, overwrite bool) {
+// updateDashboard is used to update the customized dashboards via calling grafana api
+func updateDashboard(obj interface{}, overwrite bool) {
 
 	folderID := 0.0
 	labels := obj.(*corev1.ConfigMap).ObjectMeta.Labels
 	if labels["general-folder"] == "" || strings.ToLower(labels["general-folder"]) != "true" {
-		folderID = loader.createCustomFolder()
+		folderID = createCustomFolder()
 		if folderID == 0 {
 			klog.Error("Failed to get custom folder id")
 			return
@@ -161,19 +160,19 @@ func (loader *DashboardLoader) updateDashboard(obj interface{}, overwrite bool) 
 		}
 
 		grafanaURL := grafanaURI + "/api/dashboards/db"
-		body, respStatusCode := util.SetRequest("POST", grafanaURL, bytes.NewBuffer(b))
+		body, respStatusCode := util.SetRequest("POST", grafanaURL, bytes.NewBuffer(b), retry)
 
 		if respStatusCode != http.StatusOK {
 			if respStatusCode == http.StatusPreconditionFailed {
 				if strings.Contains(string(body), "version-mismatch") {
-					loader.updateDashboard(obj, true)
+					updateDashboard(obj, true)
 				} else if strings.Contains(string(body), "name-exists") {
 					klog.Info("the dashboard name already existed")
 				} else {
-					klog.Info("failed to create/update:", "", respStatusCode)
+					klog.Infof("failed to create/update: %v", respStatusCode)
 				}
 			} else {
-				klog.Info("failed to create/update: ", "", respStatusCode)
+				klog.Infof("failed to create/update: %v", respStatusCode)
 			}
 		} else {
 			klog.Info("Dashboard created/updated")
@@ -183,10 +182,15 @@ func (loader *DashboardLoader) updateDashboard(obj interface{}, overwrite bool) 
 }
 
 // DeleteDashboard ...
-func (loader *DashboardLoader) deleteDashboard(name, namespace string) {
+func deleteDashboard(name, namespace string) {
 	uid := util.GenerateUID(name, namespace)
 	grafanaURL := grafanaURI + "/api/dashboards/uid/" + uid
 
-	util.SetRequest("DELETE", grafanaURL, nil)
+	_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
+	if respStatusCode != http.StatusOK {
+		klog.Errorf("failed to delete dashboard %v with %v", name, respStatusCode)
+	} else {
+		klog.Info("Dashboard deleted")
+	}
 	return
 }

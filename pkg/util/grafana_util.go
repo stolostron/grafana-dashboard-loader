@@ -36,31 +36,35 @@ func getHTTPClient() *http.Client {
 }
 
 // SetRequest ...
-func SetRequest(method string, url string, body io.Reader) ([]byte, int) {
+func SetRequest(method string, url string, body io.Reader, retry int) ([]byte, int) {
 	req, _ := http.NewRequest(method, url, body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Forwarded-User", defaultAdmin)
 
 	resp, err := getHTTPClient().Do(req)
+	times := 0
 	for {
 		if err == nil {
 			break
 		}
-		klog.Error("failed to send HTTP request. Retry in 5 seconds", "error", err)
-		time.Sleep(5)
+		klog.Error("failed to send HTTP request. Retry in 5 seconds ", "error ", err)
+		time.Sleep(time.Second * 5)
+		times++
+		if times == retry {
+			klog.Error("failed to send HTTP request after retrying 10 times")
+			break
+		}
 		resp, err = getHTTPClient().Do(req)
 	}
-	/* 	if err != nil {
-		klog.Error("failed to send HTTP request", "error", err)
-		return nil, 500
-	} */
 
-	defer resp.Body.Close()
-	respBody, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		klog.Info("failed to parse response body", "error", err)
-	} //else {
-	// 	klog.Info("Succeed to parse response body", "Response body", string(respBody))
-	// }
-	return respBody, resp.StatusCode
+	if resp != nil {
+		defer resp.Body.Close()
+		respBody, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			klog.Info("failed to parse response body ", "error ", err)
+		}
+		return respBody, resp.StatusCode
+	} else {
+		return nil, 404
+	}
 }

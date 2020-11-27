@@ -3,68 +3,39 @@
 package main
 
 import (
-	"flag"
-	"log"
+	goflag "flag"
+	"fmt"
+	"math/rand"
 	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
+	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/spf13/pflag"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog"
+	utilflag "k8s.io/component-base/cli/flag"
+	"k8s.io/component-base/logs"
+	"k8s.io/component-base/version"
 
-	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/loader"
+	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/controller"
 )
-
-type config struct {
-	kubeconfigPath string
-}
 
 func main() {
 
-	cfg := config{}
+	rand.Seed(time.Now().UTC().UnixNano())
 
-	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-	klog.InitFlags(klogFlags)
-	flagset := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
-	flagset.AddGoFlagSet(klogFlags)
+	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 
-	//Kubeconfig flag
-	flagset.StringVar(&cfg.kubeconfigPath, "kubeconfig-path", "",
-		"Path to a kubeconfig file. If unset, in-cluster configuration will be used")
+	logs.InitLogs()
+	defer logs.FlushLogs()
 
-	dl := loader.NewDashboardLoader(getKubernetesClients(cfg))
-	dl.WatchDashboardConfigMaps()
+	command := controllercmd.
+		NewControllerCommandConfig("grafana-dashboard-loader", version.Get(), controller.RunGrafanaLoaderController).
+		NewCommand()
+	command.Use = "grafana-dashboard-loader"
+	command.Short = "Start the grafana dashboard loader"
 
-	// use a channel to synchronize the finalization for a graceful shutdown
-	stop := make(chan struct{})
-	defer close(stop)
-
-	go dl.Run(stop)
-
-	// use a channel to handle OS signals to terminate and gracefully shut
-	// down processing
-	sigTerm := make(chan os.Signal, 1)
-	signal.Notify(sigTerm, syscall.SIGTERM)
-	signal.Notify(sigTerm, syscall.SIGINT)
-	<-sigTerm
-
-}
-
-// getKubernetesClients retrieve the Kubernetes cluster client
-func getKubernetesClients(cfg config) *kubernetes.Clientset {
-
-	// create the config from the path
-	config, err := clientcmd.BuildConfigFromFlags("", cfg.kubeconfigPath)
-	if err != nil {
-		log.Fatalf("getClusterConfig: %v-%v", err, cfg.kubeconfigPath)
+	if err := command.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
 	}
-
-	// generate the client based off of the config
-	kclient, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		log.Fatalf("kubernetes.NewForConfig: %v", err)
-	}
-	return kclient
 }
