@@ -2,7 +2,11 @@
 
 package util
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+	"time"
+)
 
 func TestGenerateUID(t *testing.T) {
 
@@ -16,4 +20,26 @@ func TestGenerateUID(t *testing.T) {
 		t.Fatalf("the uid %v should not equal to %v", uid, "4e20548bdba37201faabf30d1c419981")
 	}
 
+}
+
+func createFakeServer(t *testing.T) {
+	server3002 := http.NewServeMux()
+	server3002.HandleFunc("/",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("done"))
+		},
+	)
+	err := http.ListenAndServe(":3002", server3002)
+	if err != nil {
+		t.Fatal("fail to create internal server at 3002")
+	}
+}
+
+func TestSetRequest(t *testing.T) {
+	go createFakeServer(t)
+	time.Sleep(time.Second)
+	_, responseCode := SetRequest("GET", "http://127.0.0.1:3002", nil, 1)
+	if responseCode == 404 {
+		t.Fatalf("cannot send request to server: %v", responseCode)
+	}
 }
