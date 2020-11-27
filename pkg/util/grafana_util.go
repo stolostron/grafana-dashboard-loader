@@ -54,7 +54,7 @@ func SetRequest(method string, url string, body io.Reader, retry int) ([]byte, i
 		time.Sleep(time.Second * 5)
 		times++
 		if times == retry {
-			klog.Error("failed to send HTTP request after retrying 10 times")
+			klog.Errorf("failed to send HTTP request after retrying %v times", retry)
 			break
 		}
 		resp, err = getHTTPClient().Do(req)
@@ -68,6 +68,6 @@ func SetRequest(method string, url string, body io.Reader, retry int) ([]byte, i
 		}
 		return respBody, resp.StatusCode
 	} else {
-		return nil, 404
+		return nil, http.StatusNotFound
 	}
 }

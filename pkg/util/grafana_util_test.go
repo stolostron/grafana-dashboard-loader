@@ -39,7 +39,7 @@ func TestSetRequest(t *testing.T) {
 	go createFakeServer(t)
 	time.Sleep(time.Second)
 	_, responseCode := SetRequest("GET", "http://127.0.0.1:3002", nil, 1)
-	if responseCode == 404 {
+	if responseCode == http.StatusNotFound {
 		t.Fatalf("cannot send request to server: %v", responseCode)
 	}
 }
