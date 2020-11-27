@@ -29,7 +29,7 @@ func main() {
 	defer logs.FlushLogs()
 
 	command := controllercmd.
-		NewControllerCommandConfig("grafana-dashboard-loader", version.Get(), controller.RunGrafanaLoaderController).
+		NewControllerCommandConfig("grafana-dashboard-loader", version.Get(), controller.RunGrafanaDashboardController).
 		NewCommand()
 	command.Use = "grafana-dashboard-loader"
 	command.Short = "Start the grafana dashboard loader"

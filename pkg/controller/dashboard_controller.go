@@ -37,7 +37,8 @@ var (
 	retry = 10
 )
 
-func RunGrafanaLoaderController(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+// RunGrafanaDashboardController ...
+func RunGrafanaDashboardController(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
 	// Build kubclient client and informer for managed cluster
 	kubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
