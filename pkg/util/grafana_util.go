@@ -18,14 +18,17 @@ const (
 )
 
 // GenerateUID generates UID for customized dashboard
-func GenerateUID(namespace string, name string) string {
+func GenerateUID(namespace string, name string) (string, error) {
 	uid := namespace + "-" + name
 	if len(uid) > 40 {
 		hasher := fnv.New128a()
-		hasher.Write([]byte(uid))
+		_, err := hasher.Write([]byte(uid))
+		if err != nil {
+			return "", err
+		}
 		uid = hex.EncodeToString(hasher.Sum(nil))
 	}
-	return uid
+	return uid, nil
 }
 
 // GetHTTPClient returns http client

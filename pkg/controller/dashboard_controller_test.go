@@ -62,7 +62,6 @@ func TestGrafanaDashboardController(t *testing.T) {
 	go informer.Run(stop)
 
 	cm, err := createDashboard()
-	t.Logf("configmap is %v", cm.TypeMeta)
 	if err == nil {
 		_, err := coreClient.ConfigMaps("ns2").Create(context.TODO(), cm, metav1.CreateOptions{})
 		if err != nil {

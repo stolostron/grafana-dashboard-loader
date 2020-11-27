@@ -145,7 +145,8 @@ func updateDashboard(obj interface{}, overwrite bool) {
 			klog.Error("Failed to unmarshall data", "error", err)
 			return
 		}
-		dashboard["uid"] = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(), obj.(*corev1.ConfigMap).GetNamespace())
+		dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
+			obj.(*corev1.ConfigMap).GetNamespace())
 		dashboard["id"] = nil
 		data := map[string]interface{}{
 			"folderId":  folderID,
@@ -183,7 +184,7 @@ func updateDashboard(obj interface{}, overwrite bool) {
 
 // DeleteDashboard ...
 func deleteDashboard(name, namespace string) {
-	uid := util.GenerateUID(name, namespace)
+	uid, _ := util.GenerateUID(name, namespace)
 	grafanaURL := grafanaURI + "/api/dashboards/uid/" + uid
 
 	_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
