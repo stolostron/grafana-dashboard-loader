@@ -1,5 +1,5 @@
 # Build the grafana-dashboard-loader binary
-FROM golang:1.13.13 as builder
+FROM golang:1.14.12 as builder
 
 # Copy in the go src
 WORKDIR /go/src/github.com/open-cluster-management/grafana-dashboard-loader
