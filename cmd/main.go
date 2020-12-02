@@ -3,39 +3,35 @@
 package main
 
 import (
-	goflag "flag"
-	"fmt"
-	"math/rand"
+	"flag"
 	"os"
-	"time"
+	"os/signal"
+	"syscall"
 
-	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/spf13/pflag"
-	utilflag "k8s.io/component-base/cli/flag"
-	"k8s.io/component-base/logs"
-	"k8s.io/component-base/version"
+	"k8s.io/klog"
 
 	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/controller"
 )
 
 func main() {
 
-	rand.Seed(time.Now().UTC().UnixNano())
+	klogFlags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	klog.InitFlags(klogFlags)
+	flagset := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
+	flagset.AddGoFlagSet(klogFlags)
 
-	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
-	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+	// use a channel to synchronize the finalization for a graceful shutdown
+	stop := make(chan struct{})
+	defer close(stop)
+	
+	controller.RunGrafanaDashboardController(stop)
 
-	logs.InitLogs()
-	defer logs.FlushLogs()
+	// use a channel to handle OS signals to terminate and gracefully shut
+	// down processing
+	sigTerm := make(chan os.Signal, 1)
+	signal.Notify(sigTerm, syscall.SIGTERM)
+	signal.Notify(sigTerm, syscall.SIGINT)
+	<-sigTerm
 
-	command := controllercmd.
-		NewControllerCommandConfig("grafana-dashboard-loader", version.Get(), controller.RunGrafanaDashboardController).
-		NewCommand()
-	command.Use = "grafana-dashboard-loader"
-	command.Short = "Start the grafana dashboard loader"
-
-	if err := command.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
-	}
 }
