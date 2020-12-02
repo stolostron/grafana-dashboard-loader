@@ -28,9 +28,17 @@ func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
 
-	command := controllercmd.
-		NewControllerCommandConfig("grafana-dashboard-loader", version.Get(), controller.RunGrafanaDashboardController).
-		NewCommand()
+	cmdCfg := &controllercmd.ControllerCommandConfig{
+		startFunc:     controller.RunGrafanaDashboardController,
+		componentName: "grafana-dashboard-loader",
+		version:       version.Get(),
+
+		basicFlags: NewControllerFlags(),
+
+		DisableServing:        true,
+		DisableLeaderElection: true,
+	}
+	command := cmdCfg.NewCommand()
 	command.Use = "grafana-dashboard-loader"
 	command.Short = "Start the grafana dashboard loader"
 
