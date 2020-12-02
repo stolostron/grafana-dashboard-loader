@@ -19,10 +19,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
 	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/util"
-	"github.com/openshift/library-go/pkg/controller/controllercmd"
 )
 
 // DashboardLoader ...
@@ -38,16 +38,19 @@ var (
 )
 
 // RunGrafanaDashboardController ...
-func RunGrafanaDashboardController(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
-	// Build kubclient client and informer for managed cluster
-	kubeClient, err := kubernetes.NewForConfig(controllerContext.KubeConfig)
+func RunGrafanaDashboardController(stop <-chan struct{}) {
+	config, err := clientcmd.BuildConfigFromFlags("", "")
 	if err != nil {
-		return err
+		klog.Error("Failed to get cluster config", "error", err)
+	}
+	// Build kubeclient client and informer for managed cluster
+	kubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		klog.Fatal("Failed to build kubeclient", "error", err)
 	}
 
-	go newKubeInformer(kubeClient.CoreV1()).Run(ctx.Done())
-	<-ctx.Done()
-	return nil
+	go newKubeInformer(kubeClient.CoreV1()).Run(stop)
+	<-stop
 }
 
 func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexInformer {
