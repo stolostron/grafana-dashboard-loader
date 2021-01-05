@@ -93,7 +93,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 	return kubeInformer
 }
 
-func hasCustomFolder() float64 {
+func hasCustomFolder(folderTitle string) float64 {
 	grafanaURL := grafanaURI + "/api/folders"
 	body, _ := util.SetRequest("GET", grafanaURL, nil, retry)
 
@@ -105,19 +105,18 @@ func hasCustomFolder() float64 {
 	}
 
 	for _, folder := range folders {
-		if folder["title"] == "Custom" {
+		if folder["title"] == folderTitle {
 			return folder["id"].(float64)
 		}
 	}
 	return 0
 }
 
-func createCustomFolder() float64 {
-	folderID := hasCustomFolder()
+func createCustomFolder(folderTitle string) float64 {
+	folderID := hasCustomFolder(folderTitle)
 	if folderID == 0 {
 		grafanaURL := grafanaURI + "/api/folders"
-		body, _ := util.SetRequest("POST", grafanaURL, strings.NewReader("{\"title\":\"Custom\"}"), retry)
-
+		body, _ := util.SetRequest("POST", grafanaURL, strings.NewReader("{\"title\":\""+folderTitle+"\"}"), retry)
 		folder := map[string]interface{}{}
 		err := json.Unmarshal(body, &folder)
 		if err != nil {
@@ -131,11 +130,17 @@ func createCustomFolder() float64 {
 
 // updateDashboard is used to update the customized dashboards via calling grafana api
 func updateDashboard(obj interface{}, overwrite bool) {
-
 	folderID := 0.0
 	labels := obj.(*corev1.ConfigMap).ObjectMeta.Labels
 	if labels["general-folder"] == "" || strings.ToLower(labels["general-folder"]) != "true" {
-		folderID = createCustomFolder()
+		defaultTitle := "Custom"
+		annotations := obj.(*corev1.ConfigMap).ObjectMeta.Annotations
+		folderTitle, ok := annotations["observability.open-cluster-management.io/dashboard-folder"]
+		if ok && folderTitle != "" {
+			defaultTitle = folderTitle
+		}
+
+		folderID = createCustomFolder(defaultTitle)
 		if folderID == 0 {
 			klog.Error("Failed to get custom folder id")
 			return
