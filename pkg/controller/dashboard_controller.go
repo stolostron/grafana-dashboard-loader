@@ -133,14 +133,13 @@ func updateDashboard(obj interface{}, overwrite bool) {
 	folderID := 0.0
 	labels := obj.(*corev1.ConfigMap).ObjectMeta.Labels
 	if labels["general-folder"] == "" || strings.ToLower(labels["general-folder"]) != "true" {
-		defaultTitle := "Custom"
 		annotations := obj.(*corev1.ConfigMap).ObjectMeta.Annotations
 		folderTitle, ok := annotations["observability.open-cluster-management.io/dashboard-folder"]
-		if ok && folderTitle != "" {
-			defaultTitle = folderTitle
+		if !ok || folderTitle == "" {
+			folderTitle = "Custom"
 		}
 
-		folderID = createCustomFolder(defaultTitle)
+		folderID = createCustomFolder(folderTitle)
 		if folderID == 0 {
 			klog.Error("Failed to get custom folder id")
 			return
