@@ -11,7 +11,7 @@ COPY go.mod ./
 RUN export GO111MODULE=on && go mod tidy
 
 RUN export GO111MODULE=on \
-    && CGO_ENABLED=0 GOOS=linux go build -a -o grafana-dashboard-loader main.go \
+    && CGO_ENABLED=0 go build -a -o grafana-dashboard-loader main.go \
     && strip grafana-dashboard-loader
 
 
