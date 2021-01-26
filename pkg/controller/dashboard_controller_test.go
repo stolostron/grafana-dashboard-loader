@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) 2021 Red Hat, Inc.
 
 package controller
 
@@ -42,6 +42,12 @@ func createFakeServer(t *testing.T) {
 		},
 	)
 
+	server3001.HandleFunc("/api/dashboards/uid/ff635a025bcfea7bc3dd4f508990a3e8",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("done"))
+		},
+	)
+
 	err := http.ListenAndServe(":3001", server3001)
 	if err != nil {
 		t.Fatal("fail to create internal server at 3001")
@@ -75,7 +81,16 @@ func TestGrafanaDashboardController(t *testing.T) {
 		if err != nil {
 			t.Fatalf("fail to update configmap with %v", err)
 		}
-		// wait for 2 second to trigger AddFunc of informer
+		// wait for 2 second to trigger UpdateFunc of informer
+		time.Sleep(time.Second * 2)
+
+		cm, _ := createDashboard()
+		_, err = coreClient.ConfigMaps("ns2").Update(context.TODO(), cm, metav1.UpdateOptions{})
+		if err != nil {
+			t.Fatalf("fail to update configmap with %v", err)
+		}
+
+		// wait for 2 second to trigger UpdateFunc of informer
 		time.Sleep(time.Second * 2)
 
 		coreClient.ConfigMaps("ns2").Delete(context.TODO(), cm.GetName(), metav1.DeleteOptions{})
