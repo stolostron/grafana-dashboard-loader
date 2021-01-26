@@ -149,8 +149,10 @@ func updateDashboard(obj interface{}, overwrite bool) {
 			klog.Error("Failed to unmarshall data", "error", err)
 			return
 		}
-		dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
-			obj.(*corev1.ConfigMap).GetNamespace())
+		if dashboard["uid"] == nil {
+			dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
+				obj.(*corev1.ConfigMap).GetNamespace())
+		}
 		dashboard["id"] = nil
 		data := map[string]interface{}{
 			"folderId":  folderID,
