@@ -86,7 +86,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 		},
 		DeleteFunc: func(obj interface{}) {
 			klog.Infof("detect there is a customized dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
-			deleteDashboard(obj.(*corev1.ConfigMap).Name, obj.(*corev1.ConfigMap).Namespace)
+			deleteDashboard(obj)
 		},
 	})
 
@@ -153,8 +153,10 @@ func updateDashboard(obj interface{}, overwrite bool) {
 			klog.Error("Failed to unmarshall data", "error", err)
 			return
 		}
-		dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
-			obj.(*corev1.ConfigMap).GetNamespace())
+		if dashboard["uid"] == nil {
+			dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
+				obj.(*corev1.ConfigMap).GetNamespace())
+		}
 		dashboard["id"] = nil
 		data := map[string]interface{}{
 			"folderId":  folderID,
@@ -191,15 +193,29 @@ func updateDashboard(obj interface{}, overwrite bool) {
 }
 
 // DeleteDashboard ...
-func deleteDashboard(name, namespace string) {
-	uid, _ := util.GenerateUID(name, namespace)
-	grafanaURL := grafanaURI + "/api/dashboards/uid/" + uid
+func deleteDashboard(obj interface{}) {
+	for _, value := range obj.(*corev1.ConfigMap).Data {
 
-	_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
-	if respStatusCode != http.StatusOK {
-		klog.Errorf("failed to delete dashboard %v with %v", name, respStatusCode)
-	} else {
-		klog.Info("Dashboard deleted")
+		dashboard := map[string]interface{}{}
+		err := json.Unmarshal([]byte(value), &dashboard)
+		if err != nil {
+			klog.Error("Failed to unmarshall data", "error", err)
+			return
+		}
+
+		uid, _ := util.GenerateUID(obj.(*corev1.ConfigMap).Name, obj.(*corev1.ConfigMap).Namespace)
+		if dashboard["uid"] != nil {
+			uid = dashboard["uid"].(string)
+		}
+
+		grafanaURL := grafanaURI + "/api/dashboards/uid/" + uid
+
+		_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
+		if respStatusCode != http.StatusOK {
+			klog.Errorf("failed to delete dashboard %v with %v", obj.(*corev1.ConfigMap).Name, respStatusCode)
+		} else {
+			klog.Info("Dashboard deleted")
+		}
 	}
 	return
 }
