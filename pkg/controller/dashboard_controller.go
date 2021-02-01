@@ -4,6 +4,7 @@ package controller
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -12,7 +13,9 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/fields"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -74,11 +77,14 @@ func isDesiredDashboardConfigmap(obj interface{}) bool {
 func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexInformer {
 	// get watched namespace
 	watchedNS := os.Getenv("POD_NAMESPACE")
-	watchlist := cache.NewListWatchFromClient(
-		coreClient.RESTClient(),
-		"configmaps",
-		watchedNS,
-		fields.Everything())
+	watchlist := &cache.ListWatch{
+		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
+			return coreClient.ConfigMaps(watchedNS).List(context.TODO(), metav1.ListOptions{})
+		},
+		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
+			return coreClient.ConfigMaps(watchedNS).Watch(context.TODO(), metav1.ListOptions{})
+		},
+	}
 	kubeInformer := cache.NewSharedIndexInformer(
 		watchlist,
 		&corev1.ConfigMap{},
