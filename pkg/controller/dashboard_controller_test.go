@@ -100,3 +100,92 @@ func TestGrafanaDashboardController(t *testing.T) {
 	close(stop)
 	<-stop
 }
+
+func TestIsDesiredDashboardConfigmap(t *testing.T) {
+	os.Setenv("POD_NAMESPACE", "test")
+	testCaseList := []struct {
+		name     string
+		cm       *corev1.ConfigMap
+		expected bool
+	}{
+
+		{
+			"invalid cm",
+			nil,
+			false,
+		},
+
+		{
+			"valid label",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Labels:    map[string]string{"grafana-custom-dashboard": "true"},
+				},
+			},
+			true,
+		},
+
+		{
+			"valid name",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "grafana-dashboard",
+					Namespace: "test",
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{Kind: "MultiClusterObservability"},
+					},
+				},
+			},
+			true,
+		},
+
+		{
+			"invalid label",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Labels:    map[string]string{"grafana-custom-dashboard": "false"},
+				},
+			},
+			false,
+		},
+
+		{
+			"invalid name",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{Kind: "MultiClusterObservability"},
+					},
+				},
+			},
+			false,
+		},
+
+		{
+			"invalid owner references",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					OwnerReferences: []metav1.OwnerReference{
+						metav1.OwnerReference{Kind: "test"},
+					},
+				},
+			},
+			false,
+		},
+	}
+
+	for _, c := range testCaseList {
+		output := isDesiredDashboardConfigmap(c.cm)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
