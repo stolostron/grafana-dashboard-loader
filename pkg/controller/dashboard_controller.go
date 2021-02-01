@@ -4,7 +4,6 @@ package controller
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -13,9 +12,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -53,38 +50,59 @@ func RunGrafanaDashboardController(stop <-chan struct{}) {
 	<-stop
 }
 
+func isOurDashboardConfigmap(obj interface{}) bool {
+	cm := obj.(*corev1.ConfigMap)
+	labels := cm.ObjectMeta.Labels
+	if strings.ToLower(labels["grafana-custom-dashboard"]) == "true" {
+		return true
+	}
+
+	owners := cm.GetOwnerReferences()
+	for _, owner := range owners {
+		if strings.Contains(cm.Name, "grafana-dashboard") && owner.Kind == "MultiClusterObservability" {
+			return true
+		}
+	}
+
+	return false
+}
+
 func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexInformer {
 	// get watched namespace
 	watchedNS := os.Getenv("POD_NAMESPACE")
-
+	watchlist := cache.NewListWatchFromClient(
+		coreClient.RESTClient(),
+		"configmaps",
+		watchedNS,
+		fields.Everything())
 	kubeInformer := cache.NewSharedIndexInformer(
-		&cache.ListWatch{
-			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-				return coreClient.ConfigMaps(watchedNS).List(context.TODO(), metav1.ListOptions{
-					LabelSelector: "grafana-custom-dashboard=true",
-				})
-			},
-			WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-				return coreClient.ConfigMaps(watchedNS).Watch(context.TODO(), metav1.ListOptions{
-					LabelSelector: "grafana-custom-dashboard=true",
-				})
-			},
-		},
-		&corev1.ConfigMap{}, time.Second, cache.Indexers{},
+		watchlist,
+		&corev1.ConfigMap{},
+		time.Second,
+		cache.Indexers{},
 	)
 
 	kubeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
+			if !isOurDashboardConfigmap(obj) {
+				return
+			}
 			klog.Infof("detect there is a new dashboard %v created", obj.(*corev1.ConfigMap).Name)
 			updateDashboard(obj, false)
 		},
 		UpdateFunc: func(old, new interface{}) {
+			if !isOurDashboardConfigmap(new) {
+				return
+			}
 			if !reflect.DeepEqual(old.(*corev1.ConfigMap).Data, new.(*corev1.ConfigMap).Data) {
 				klog.Infof("detect there is a customized dashboard %v updated", new.(*corev1.ConfigMap).Name)
 				updateDashboard(new, false)
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
+			if !isOurDashboardConfigmap(obj) {
+				return
+			}
 			klog.Infof("detect there is a customized dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
 			deleteDashboard(obj)
 		},
