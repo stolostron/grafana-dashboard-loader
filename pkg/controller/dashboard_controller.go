@@ -95,7 +95,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 				return
 			}
 			if !reflect.DeepEqual(old.(*corev1.ConfigMap).Data, new.(*corev1.ConfigMap).Data) {
-				klog.Infof("detect there is a customized dashboard %v updated", new.(*corev1.ConfigMap).Name)
+				klog.Infof("detect there is a dashboard %v updated", new.(*corev1.ConfigMap).Name)
 				updateDashboard(new, false)
 			}
 		},
@@ -103,7 +103,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 			if !isOurDashboardConfigmap(obj) {
 				return
 			}
-			klog.Infof("detect there is a customized dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
+			klog.Infof("detect there is a dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
 			deleteDashboard(obj)
 		},
 	})
