@@ -75,6 +75,7 @@ func TestGrafanaDashboardController(t *testing.T) {
 		}
 		// wait for 2 second to trigger AddFunc of informer
 		time.Sleep(time.Second * 2)
+		updateDashboard(cm, false)
 
 		cm.Data = map[string]string{}
 		_, err = coreClient.ConfigMaps("ns2").Update(context.TODO(), cm, metav1.UpdateOptions{})
@@ -83,6 +84,7 @@ func TestGrafanaDashboardController(t *testing.T) {
 		}
 		// wait for 2 second to trigger UpdateFunc of informer
 		time.Sleep(time.Second * 2)
+		updateDashboard(cm, false)
 
 		cm, _ := createDashboard()
 		_, err = coreClient.ConfigMaps("ns2").Update(context.TODO(), cm, metav1.UpdateOptions{})
@@ -92,9 +94,12 @@ func TestGrafanaDashboardController(t *testing.T) {
 
 		// wait for 2 second to trigger UpdateFunc of informer
 		time.Sleep(time.Second * 2)
+		updateDashboard(cm, false)
 
 		coreClient.ConfigMaps("ns2").Delete(context.TODO(), cm.GetName(), metav1.DeleteOptions{})
 		time.Sleep(time.Second * 2)
+		deleteDashboard(cm)
+
 	}
 
 	close(stop)
