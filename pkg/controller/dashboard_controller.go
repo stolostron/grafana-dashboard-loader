@@ -50,8 +50,12 @@ func RunGrafanaDashboardController(stop <-chan struct{}) {
 	<-stop
 }
 
-func isOurDashboardConfigmap(obj interface{}) bool {
-	cm := obj.(*corev1.ConfigMap)
+func isDesiredDashboardConfigmap(obj interface{}) bool {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok || cm == nil {
+		return false
+	}
+
 	labels := cm.ObjectMeta.Labels
 	if strings.ToLower(labels["grafana-custom-dashboard"]) == "true" {
 		return true
@@ -84,14 +88,14 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 
 	kubeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			if !isOurDashboardConfigmap(obj) {
+			if !isDesiredDashboardConfigmap(obj) {
 				return
 			}
 			klog.Infof("detect there is a new dashboard %v created", obj.(*corev1.ConfigMap).Name)
 			updateDashboard(obj, false)
 		},
 		UpdateFunc: func(old, new interface{}) {
-			if !isOurDashboardConfigmap(new) {
+			if !isDesiredDashboardConfigmap(new) {
 				return
 			}
 			if !reflect.DeepEqual(old.(*corev1.ConfigMap).Data, new.(*corev1.ConfigMap).Data) {
@@ -100,7 +104,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 			}
 		},
 		DeleteFunc: func(obj interface{}) {
-			if !isOurDashboardConfigmap(obj) {
+			if !isDesiredDashboardConfigmap(obj) {
 				return
 			}
 			klog.Infof("detect there is a dashboard %v deleted", obj.(*corev1.ConfigMap).Name)
