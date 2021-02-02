@@ -6,9 +6,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -23,6 +23,13 @@ import (
 	"k8s.io/klog"
 
 	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/util"
+)
+
+const (
+	unmarshallErrMsg    = "Failed to unmarshall response body"
+	customFolderKey     = "observability.open-cluster-management.io/dashboard-folder"
+	generalFolderKey    = "general-folder"
+	defaultCustomFolder = "Custom"
 )
 
 // DashboardLoader ...
@@ -88,7 +95,7 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 	kubeInformer := cache.NewSharedIndexInformer(
 		watchlist,
 		&corev1.ConfigMap{},
-		time.Second,
+		time.Second*0,
 		cache.Indexers{},
 	)
 
@@ -98,16 +105,14 @@ func newKubeInformer(coreClient corev1client.CoreV1Interface) cache.SharedIndexI
 				return
 			}
 			klog.Infof("detect there is a new dashboard %v created", obj.(*corev1.ConfigMap).Name)
-			updateDashboard(obj, false)
+			updateDashboard(nil, obj, false)
 		},
 		UpdateFunc: func(old, new interface{}) {
 			if !isDesiredDashboardConfigmap(new) {
 				return
 			}
-			if !reflect.DeepEqual(old.(*corev1.ConfigMap).Data, new.(*corev1.ConfigMap).Data) {
-				klog.Infof("detect there is a dashboard %v updated", new.(*corev1.ConfigMap).Name)
-				updateDashboard(new, false)
-			}
+			klog.Infof("detect there is a dashboard %v updated", new.(*corev1.ConfigMap).Name)
+			updateDashboard(old, new, false)
 		},
 		DeleteFunc: func(obj interface{}) {
 			if !isDesiredDashboardConfigmap(obj) {
@@ -128,7 +133,7 @@ func hasCustomFolder(folderTitle string) float64 {
 	folders := []map[string]interface{}{}
 	err := json.Unmarshal(body, &folders)
 	if err != nil {
-		klog.Error("Failed to unmarshall response body", "error", err)
+		klog.Error(unmarshallErrMsg, "error", err)
 		return 0
 	}
 
@@ -148,7 +153,7 @@ func createCustomFolder(folderTitle string) float64 {
 		folder := map[string]interface{}{}
 		err := json.Unmarshal(body, &folder)
 		if err != nil {
-			klog.Error("Failed to unmarshall response body", "error", err)
+			klog.Error(unmarshallErrMsg, "error", err)
 			return 0
 		}
 		return folder["id"].(float64)
@@ -156,24 +161,100 @@ func createCustomFolder(folderTitle string) float64 {
 	return folderID
 }
 
-// updateDashboard is used to update the customized dashboards via calling grafana api
-func updateDashboard(obj interface{}, overwrite bool) {
-	folderID := 0.0
-	labels := obj.(*corev1.ConfigMap).ObjectMeta.Labels
-	if labels["general-folder"] == "" || strings.ToLower(labels["general-folder"]) != "true" {
-		annotations := obj.(*corev1.ConfigMap).ObjectMeta.Annotations
-		folderTitle, ok := annotations["observability.open-cluster-management.io/dashboard-folder"]
-		if !ok || folderTitle == "" {
-			folderTitle = "Custom"
-		}
+func getCustomFolderUID(folderID float64) string {
+	grafanaURL := grafanaURI + "/api/folders/id/" + fmt.Sprint(folderID)
+	body, _ := util.SetRequest("GET", grafanaURL, nil, retry)
+	folder := map[string]interface{}{}
+	err := json.Unmarshal(body, &folder)
+	if err != nil {
+		klog.Error(unmarshallErrMsg, "error", err)
+		return ""
+	}
+	uid, ok := folder["uid"]
+	if ok {
+		return uid.(string)
+	}
 
+	return ""
+}
+
+func isEmptyFolder(folderTitle string) bool {
+	folderID := hasCustomFolder(folderTitle)
+	if folderID == 0 {
+		return false
+	}
+
+	grafanaURL := grafanaURI + "/api/search?folderIds=" + fmt.Sprint(folderID)
+	body, _ := util.SetRequest("GET", grafanaURL, nil, retry)
+	dashboards := []map[string]interface{}{}
+	err := json.Unmarshal(body, &dashboards)
+	if err != nil {
+		klog.Error(unmarshallErrMsg, "error", err)
+		return false
+	}
+
+	if len(dashboards) == 0 {
+		klog.Infof("folder %s is empty", folderTitle)
+		return true
+	}
+
+	return false
+}
+
+func deleteCustomFolder(folderTitle string) bool {
+	folderID := hasCustomFolder(folderTitle)
+	if folderID == 0 {
+		return false
+	}
+
+	uid := getCustomFolderUID(folderID)
+	if uid == "" {
+		klog.Error("Failed to get custom folder UID")
+		return false
+	}
+
+	grafanaURL := grafanaURI + "/api/folders/" + uid
+	_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
+	if respStatusCode != http.StatusOK {
+		klog.Errorf("failed to delete custom folder %v with %v", folderTitle, respStatusCode)
+		return false
+	}
+
+	klog.Infof("custom folder %v deleted", folderTitle)
+	return true
+}
+
+func getDashboardCustomFolderTitle(obj interface{}) string {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok || cm == nil {
+		return ""
+	}
+
+	labels := cm.ObjectMeta.Labels
+	if labels[generalFolderKey] == "" || strings.ToLower(labels[generalFolderKey]) != "true" {
+		annotations := cm.ObjectMeta.Annotations
+		customFolder, ok := annotations[customFolderKey]
+		if !ok || customFolder == "" {
+			customFolder = defaultCustomFolder
+		}
+		return customFolder
+	}
+	return ""
+}
+
+// updateDashboard is used to update the customized dashboards via calling grafana api
+func updateDashboard(old, new interface{}, overwrite bool) {
+	folderID := 0.0
+	folderTitle := getDashboardCustomFolderTitle(new)
+	if folderTitle != "" {
 		folderID = createCustomFolder(folderTitle)
 		if folderID == 0 {
 			klog.Error("Failed to get custom folder id")
 			return
 		}
 	}
-	for _, value := range obj.(*corev1.ConfigMap).Data {
+
+	for _, value := range new.(*corev1.ConfigMap).Data {
 
 		dashboard := map[string]interface{}{}
 		err := json.Unmarshal([]byte(value), &dashboard)
@@ -182,8 +263,8 @@ func updateDashboard(obj interface{}, overwrite bool) {
 			return
 		}
 		if dashboard["uid"] == nil {
-			dashboard["uid"], _ = util.GenerateUID(obj.(*corev1.ConfigMap).GetName(),
-				obj.(*corev1.ConfigMap).GetNamespace())
+			dashboard["uid"], _ = util.GenerateUID(new.(*corev1.ConfigMap).GetName(),
+				new.(*corev1.ConfigMap).GetNamespace())
 		}
 		dashboard["id"] = nil
 		data := map[string]interface{}{
@@ -204,7 +285,7 @@ func updateDashboard(obj interface{}, overwrite bool) {
 		if respStatusCode != http.StatusOK {
 			if respStatusCode == http.StatusPreconditionFailed {
 				if strings.Contains(string(body), "version-mismatch") {
-					updateDashboard(obj, true)
+					updateDashboard(nil, new, true)
 				} else if strings.Contains(string(body), "name-exists") {
 					klog.Info("the dashboard name already existed")
 				} else {
@@ -218,6 +299,10 @@ func updateDashboard(obj interface{}, overwrite bool) {
 		}
 	}
 
+	folderTitle = getDashboardCustomFolderTitle(old)
+	if folderTitle != "" && isEmptyFolder(folderTitle) {
+		deleteCustomFolder(folderTitle)
+	}
 }
 
 // DeleteDashboard ...
@@ -243,6 +328,11 @@ func deleteDashboard(obj interface{}) {
 			klog.Errorf("failed to delete dashboard %v with %v", obj.(*corev1.ConfigMap).Name, respStatusCode)
 		} else {
 			klog.Info("Dashboard deleted")
+		}
+
+		folderTitle := getDashboardCustomFolderTitle(obj)
+		if folderTitle != "" && isEmptyFolder(folderTitle) {
+			deleteCustomFolder(folderTitle)
 		}
 	}
 	return
