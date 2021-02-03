@@ -65,6 +65,12 @@ func createFakeServer(t *testing.T) {
 		},
 	)
 
+	server3001.HandleFunc("/api/search",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("[]"))
+		},
+	)
+
 	server3001.HandleFunc("/api/dashboards/db",
 		func(w http.ResponseWriter, req *http.Request) {
 			w.Write([]byte("done"))
@@ -254,6 +260,39 @@ func TestGetCustomFolderUID(t *testing.T) {
 	}
 	for _, c := range testCaseList {
 		output := getCustomFolderUID(c.id)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
+
+func TestIsEmptyFolder(t *testing.T) {
+	if !hasFakeServer {
+		go createFakeServer(t)
+		retry = 1
+	}
+
+	testCaseList := []struct {
+		name        string
+		folderTitle string
+		expected    bool
+	}{
+
+		{
+			"invalid name",
+			"invalidName",
+			false,
+		},
+
+		{
+			"empty folder",
+			"Custom",
+			true,
+		},
+	}
+
+	for _, c := range testCaseList {
+		output := isEmptyFolder(c.folderTitle)
 		if output != c.expected {
 			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
 		}
