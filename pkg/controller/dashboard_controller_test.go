@@ -16,6 +16,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+var (
+	hasFakeServer bool = false
+)
+
 func createDashboard() (*corev1.ConfigMap, error) {
 	// read the whole file at once
 	data, err := ioutil.ReadFile("../../examples/k8s-dashboard.yaml")
@@ -29,13 +33,44 @@ func createDashboard() (*corev1.ConfigMap, error) {
 }
 
 func createFakeServer(t *testing.T) {
+	hasFakeServer = true
 	server3001 := http.NewServeMux()
-
 	server3001.HandleFunc("/api/folders",
 		func(w http.ResponseWriter, req *http.Request) {
-			w.Write([]byte("[{\"id\": 1,\"uid\": \"test\",\"title\": \"Custom\"}]"))
+			w.Write([]byte("[{\"id\": 1,\"uid\": \"test\",\"title\": \"Custom\"}, {\"id\": 2, \"title\": \"noServer\",\"uid\": \"noServer\"}, {\"id\": 3,\"title\": \"noUID\"}]"))
 		},
 	)
+
+	server3001.HandleFunc("/api/folders/id/1",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("{\"uid\": \"test\"}"))
+		},
+	)
+
+	server3001.HandleFunc("/api/folders/id/2",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("{\"uid\": \"noServer\"}"))
+		},
+	)
+
+	server3001.HandleFunc("/api/folders/id/3",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("{}"))
+		},
+	)
+
+	server3001.HandleFunc("/api/folders/test",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("{}"))
+		},
+	)
+
+	server3001.HandleFunc("/api/search",
+		func(w http.ResponseWriter, req *http.Request) {
+			w.Write([]byte("[]"))
+		},
+	)
+
 	server3001.HandleFunc("/api/dashboards/db",
 		func(w http.ResponseWriter, req *http.Request) {
 			w.Write([]byte("done"))
@@ -75,7 +110,7 @@ func TestGrafanaDashboardController(t *testing.T) {
 		}
 		// wait for 2 second to trigger AddFunc of informer
 		time.Sleep(time.Second * 2)
-		updateDashboard(cm, false)
+		updateDashboard(nil, cm, false)
 
 		cm.Data = map[string]string{}
 		_, err = coreClient.ConfigMaps("ns2").Update(context.TODO(), cm, metav1.UpdateOptions{})
@@ -84,7 +119,7 @@ func TestGrafanaDashboardController(t *testing.T) {
 		}
 		// wait for 2 second to trigger UpdateFunc of informer
 		time.Sleep(time.Second * 2)
-		updateDashboard(cm, false)
+		updateDashboard(nil, cm, false)
 
 		cm, _ := createDashboard()
 		_, err = coreClient.ConfigMaps("ns2").Update(context.TODO(), cm, metav1.UpdateOptions{})
@@ -94,7 +129,7 @@ func TestGrafanaDashboardController(t *testing.T) {
 
 		// wait for 2 second to trigger UpdateFunc of informer
 		time.Sleep(time.Second * 2)
-		updateDashboard(cm, false)
+		updateDashboard(nil, cm, false)
 
 		coreClient.ConfigMaps("ns2").Delete(context.TODO(), cm.GetName(), metav1.DeleteOptions{})
 		time.Sleep(time.Second * 2)
@@ -139,7 +174,7 @@ func TestIsDesiredDashboardConfigmap(t *testing.T) {
 					Name:      "grafana-dashboard",
 					Namespace: "test",
 					OwnerReferences: []metav1.OwnerReference{
-						metav1.OwnerReference{Kind: "MultiClusterObservability"},
+						{Kind: "MultiClusterObservability"},
 					},
 				},
 			},
@@ -165,7 +200,7 @@ func TestIsDesiredDashboardConfigmap(t *testing.T) {
 					Name:      "test",
 					Namespace: "test",
 					OwnerReferences: []metav1.OwnerReference{
-						metav1.OwnerReference{Kind: "MultiClusterObservability"},
+						{Kind: "MultiClusterObservability"},
 					},
 				},
 			},
@@ -179,7 +214,7 @@ func TestIsDesiredDashboardConfigmap(t *testing.T) {
 					Name:      "test",
 					Namespace: "test",
 					OwnerReferences: []metav1.OwnerReference{
-						metav1.OwnerReference{Kind: "test"},
+						{Kind: "test"},
 					},
 				},
 			},
@@ -189,6 +224,165 @@ func TestIsDesiredDashboardConfigmap(t *testing.T) {
 
 	for _, c := range testCaseList {
 		output := isDesiredDashboardConfigmap(c.cm)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
+
+func TestGetCustomFolderUID(t *testing.T) {
+	if !hasFakeServer {
+		go createFakeServer(t)
+		retry = 1
+	}
+
+	testCaseList := []struct {
+		name     string
+		id       float64
+		expected string
+	}{
+
+		{
+			"valid folder",
+			1,
+			"test",
+		},
+		{
+			"invalid folder",
+			0,
+			"",
+		},
+		{
+			"no uid field",
+			3,
+			"",
+		},
+	}
+	for _, c := range testCaseList {
+		output := getCustomFolderUID(c.id)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
+
+func TestIsEmptyFolder(t *testing.T) {
+	if !hasFakeServer {
+		go createFakeServer(t)
+		retry = 1
+	}
+
+	testCaseList := []struct {
+		name     string
+		folderID float64
+		expected bool
+	}{
+
+		{
+			"invalid ID",
+			0,
+			false,
+		},
+
+		{
+			"empty folder",
+			1,
+			true,
+		},
+	}
+
+	for _, c := range testCaseList {
+		output := isEmptyFolder(c.folderID)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
+
+func TestGetDashboardCustomFolderTitle(t *testing.T) {
+	testCaseList := []struct {
+		name     string
+		cm       *corev1.ConfigMap
+		expected string
+	}{
+
+		{
+			"invalid cm",
+			nil,
+			"",
+		},
+
+		{
+			"default folder",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "grafana-dashboard",
+					Namespace: "test",
+				},
+			},
+			"Custom",
+		},
+
+		{
+			"general folder",
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "grafana-dashboard",
+					Namespace: "test",
+					Labels:    map[string]string{"general-folder": "true"},
+				},
+			},
+			"",
+		},
+	}
+
+	for _, c := range testCaseList {
+		output := getDashboardCustomFolderTitle(c.cm)
+		if output != c.expected {
+			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
+		}
+	}
+}
+
+func TestDeleteCustomFolder(t *testing.T) {
+	if !hasFakeServer {
+		go createFakeServer(t)
+		retry = 1
+	}
+
+	testCaseList := []struct {
+		name     string
+		folderID float64
+		expected bool
+	}{
+
+		{
+			"invalid ID",
+			0,
+			false,
+		},
+
+		{
+			"no UID",
+			3,
+			false,
+		},
+
+		{
+			"request error",
+			2,
+			false,
+		},
+
+		{
+			"valid name",
+			1,
+			true,
+		},
+	}
+
+	for _, c := range testCaseList {
+		output := deleteCustomFolder(c.folderID)
 		if output != c.expected {
 			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
 		}
