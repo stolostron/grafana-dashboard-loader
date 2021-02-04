@@ -273,26 +273,26 @@ func TestIsEmptyFolder(t *testing.T) {
 	}
 
 	testCaseList := []struct {
-		name        string
-		folderTitle string
-		expected    bool
+		name     string
+		folderID float64
+		expected bool
 	}{
 
 		{
-			"invalid name",
-			"invalidName",
+			"invalid ID",
+			0,
 			false,
 		},
 
 		{
 			"empty folder",
-			"Custom",
+			1,
 			true,
 		},
 	}
 
 	for _, c := range testCaseList {
-		output := isEmptyFolder(c.folderTitle)
+		output := isEmptyFolder(c.folderID)
 		if output != c.expected {
 			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
 		}
@@ -351,38 +351,38 @@ func TestDeleteCustomFolder(t *testing.T) {
 	}
 
 	testCaseList := []struct {
-		name        string
-		folderTitle string
-		expected    bool
+		name     string
+		folderID float64
+		expected bool
 	}{
 
 		{
-			"invalid name",
-			"invalidName",
+			"invalid ID",
+			0,
 			false,
 		},
 
 		{
 			"no UID",
-			"noUID",
+			3,
 			false,
 		},
 
 		{
 			"request error",
-			"noServer",
+			2,
 			false,
 		},
 
 		{
 			"valid name",
-			"Custom",
+			1,
 			true,
 		},
 	}
 
 	for _, c := range testCaseList {
-		output := deleteCustomFolder(c.folderTitle)
+		output := deleteCustomFolder(c.folderID)
 		if output != c.expected {
 			t.Errorf("case (%v) output: (%v) is not the expected: (%v)", c.name, output, c.expected)
 		}

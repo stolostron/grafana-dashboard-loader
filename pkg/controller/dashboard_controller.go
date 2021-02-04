@@ -178,8 +178,7 @@ func getCustomFolderUID(folderID float64) string {
 	return ""
 }
 
-func isEmptyFolder(folderTitle string) bool {
-	folderID := hasCustomFolder(folderTitle)
+func isEmptyFolder(folderID float64) bool {
 	if folderID == 0 {
 		return false
 	}
@@ -194,15 +193,14 @@ func isEmptyFolder(folderTitle string) bool {
 	}
 
 	if len(dashboards) == 0 {
-		klog.Infof("folder %s is empty", folderTitle)
+		klog.Infof("folder %v is empty", folderID)
 		return true
 	}
 
 	return false
 }
 
-func deleteCustomFolder(folderTitle string) bool {
-	folderID := hasCustomFolder(folderTitle)
+func deleteCustomFolder(folderID float64) bool {
 	if folderID == 0 {
 		return false
 	}
@@ -216,11 +214,11 @@ func deleteCustomFolder(folderTitle string) bool {
 	grafanaURL := grafanaURI + "/api/folders/" + uid
 	_, respStatusCode := util.SetRequest("DELETE", grafanaURL, nil, retry)
 	if respStatusCode != http.StatusOK {
-		klog.Errorf("failed to delete custom folder %v with %v", folderTitle, respStatusCode)
+		klog.Errorf("failed to delete custom folder %v with %v", folderID, respStatusCode)
 		return false
 	}
 
-	klog.Infof("custom folder %v deleted", folderTitle)
+	klog.Infof("custom folder %v deleted", folderID)
 	return true
 }
 
@@ -300,8 +298,9 @@ func updateDashboard(old, new interface{}, overwrite bool) {
 	}
 
 	folderTitle = getDashboardCustomFolderTitle(old)
-	if folderTitle != "" && isEmptyFolder(folderTitle) {
-		deleteCustomFolder(folderTitle)
+	folderID = hasCustomFolder(folderTitle)
+	if isEmptyFolder(folderID) {
+		deleteCustomFolder(folderID)
 	}
 }
 
@@ -331,8 +330,9 @@ func deleteDashboard(obj interface{}) {
 		}
 
 		folderTitle := getDashboardCustomFolderTitle(obj)
-		if folderTitle != "" && isEmptyFolder(folderTitle) {
-			deleteCustomFolder(folderTitle)
+		folderID := hasCustomFolder(folderTitle)
+		if isEmptyFolder(folderID) {
+			deleteCustomFolder(folderID)
 		}
 	}
 	return
