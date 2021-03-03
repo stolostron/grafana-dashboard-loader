@@ -1,4 +1,5 @@
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) 2021 Red Hat, Inc.
+// Copyright Contributors to the Open Cluster Management project
 
 package main
 
@@ -24,7 +25,7 @@ func main() {
 	// use a channel to synchronize the finalization for a graceful shutdown
 	stop := make(chan struct{})
 	defer close(stop)
-	
+
 	controller.RunGrafanaDashboardController(stop)
 
 	// use a channel to handle OS signals to terminate and gracefully shut
