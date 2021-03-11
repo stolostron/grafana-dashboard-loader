@@ -10,3 +10,6 @@ require (
 	k8s.io/client-go v0.19.4
 	k8s.io/klog v1.0.0
 )
+
+// Resolves CVE-2020-14040
+replace golang.org/x/text => golang.org/x/text v0.3.5
