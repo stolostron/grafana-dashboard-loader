@@ -21,7 +21,11 @@ func GenerateUID(namespace string, name string) string {
 	uid := namespace + "-" + name
 	if len(uid) > 40 {
 		hasher := fnv.New128a()
-		hasher.Write([]byte(uid))
+		_, err := hasher.Write([]byte(uid))
+		if err != nil {
+			klog.Error("failed to hasher.Write", "error", err)
+			return ""
+		}
 		uid = hex.EncodeToString(hasher.Sum(nil))
 	}
 	return uid
