@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,6 +33,7 @@ const (
 	customFolderKey     = "observability.open-cluster-management.io/dashboard-folder"
 	generalFolderKey    = "general-folder"
 	defaultCustomFolder = "Custom"
+	homeDashboardTitle  = "ACM - Clusters Overview"
 )
 
 // DashboardLoader ...
@@ -294,6 +297,21 @@ func updateDashboard(old, new interface{}, overwrite bool) {
 				klog.Infof("failed to create/update: %v", respStatusCode)
 			}
 		} else {
+			if dashboard["title"] == homeDashboardTitle {
+				// get "id" value from response
+				re := regexp.MustCompile("\"id\":(\\d+),")
+				result := re.FindSubmatch(body)
+				if len(result) != 2 {
+					klog.Infof("failed to retrieve dashboard id")
+				} else {
+					id, err := strconv.Atoi(strings.Trim(string(result[1]), " "))
+					if err != nil {
+						klog.Error(err, "failed to parse dashboard id")
+					} else {
+						setHomeDashboard(id)
+					}
+				}
+			}
 			klog.Info("Dashboard created/updated")
 		}
 	}
@@ -337,4 +355,24 @@ func deleteDashboard(obj interface{}) {
 		}
 	}
 	return
+}
+
+func setHomeDashboard(id int) {
+	data := map[string]int{
+		"homeDashboardId": id,
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		klog.Error("failed to marshal body", "error", err)
+		return
+	}
+	grafanaURL := grafanaURI + "/api/org/preferences"
+	_, respStatusCode := util.SetRequest("PUT", grafanaURL, bytes.NewBuffer(b), retry)
+
+	if respStatusCode != http.StatusOK {
+		klog.Infof("failed to set home dashboard: %v", respStatusCode)
+	} else {
+		klog.Info("Home dashboard is set")
+	}
 }
