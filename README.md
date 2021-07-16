@@ -1,5 +1,3 @@
-> This branch is deprecated. It has been moved to https://github.com/open-cluster-management/multicluster-observability-operator as a sub-package `loaders/dashboards`
-
 # grafana-dashboard-loader
 
 Sidecar proxy to load grafana dashboards from configmaps.
