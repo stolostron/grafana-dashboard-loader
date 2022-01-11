@@ -1,4 +1,4 @@
-module github.com/stolostorn/grafana-dashboard-loader
+module github.com/stolostron/grafana-dashboard-loader
 
 go 1.17
 
