@@ -25,7 +25,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/util"
+	"github.com/stolostorn/grafana-dashboard-loader/pkg/util"
 )
 
 const (

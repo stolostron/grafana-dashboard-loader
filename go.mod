@@ -1,4 +1,4 @@
-module github.com/open-cluster-management/grafana-dashboard-loader
+module github.com/stolostorn/grafana-dashboard-loader
 
 go 1.17
 

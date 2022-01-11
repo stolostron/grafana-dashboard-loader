@@ -3,7 +3,7 @@
 Sidecar proxy to load grafana dashboards from configmaps.
 ## Prerequisites
 
-- You must install [Open Cluster Management Observabilty](https://github.com/open-cluster-management/multicluster-observability-operator)
+- You must install [Open Cluster Management Observabilty](https://github.com/stolostorn/multicluster-observability-operator)
 
 ## How to build image
 
