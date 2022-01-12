@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/klog"
 
-	"github.com/open-cluster-management/grafana-dashboard-loader/pkg/controller"
+	"github.com/stolostron/grafana-dashboard-loader/pkg/controller"
 )
 
 func main() {
