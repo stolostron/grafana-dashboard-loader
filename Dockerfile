@@ -2,7 +2,7 @@
 FROM golang:1.14.12 as builder
 
 # Copy in the go src
-WORKDIR /go/src/github.com/open-cluster-management/grafana-dashboard-loader
+WORKDIR /go/src/github.com/stolostron/grafana-dashboard-loader
 
 COPY pkg/    pkg/
 COPY cmd/main.go ./
@@ -18,6 +18,6 @@ RUN export GO111MODULE=on \
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 
 WORKDIR /
-COPY --from=builder /go/src/github.com/open-cluster-management/grafana-dashboard-loader/grafana-dashboard-loader .
+COPY --from=builder /go/src/github.com/stolostron/grafana-dashboard-loader/grafana-dashboard-loader .
 
 ENTRYPOINT ["/grafana-dashboard-loader"]
