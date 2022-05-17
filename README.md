@@ -12,3 +12,5 @@ $ docker build -f Dockerfile.prow -t grafana-dashboard-loader:latest .
 ```
 
 Now, you can use this image to replace the grafana-dashboard-loader component and verify your PRs.
+
+Rebuild Image: Tue May 17 14:57:33 EDT 2022
