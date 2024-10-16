@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> This repository is archived, as the code has moved to the [multicluster-observability-operator](https://github.com/stolostron/multicluster-observability-operator/tree/main/loaders/dashboards) repo.
+
 # grafana-dashboard-loader
 
 Sidecar proxy to load grafana dashboards from configmaps.
